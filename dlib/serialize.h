@@ -586,19 +586,53 @@ namespace dlib
         }
     }
 
+    //carwin  serialize("shapesmall.dat") << sp
     inline void serialize ( const float& item, std::ostream& out) 
-    { 
-        serialize_floating_point(item,out);
+    {
+        static int flag = 0;
+        if(0==flag) out.write("31415926",8);
+        if(0==flag) flag = 1;
+
+        float fvalue = item;
+        uint16_t h = 0;
+        ccv_float_to_half_precision(&fvalue,&h,1);
+
+        static int c = 0; c++;
+        if(c>0)           h = (h >> 2) << 2;
+        if(c>1024*1024)   h = (h >> 4) << 4;
+        if(c>2*1024*1024) h = (h >> 5) << 5;
+        if(c>4*1024*1024) h = (h >> 7) << 7;
+        if(c>8*1024*1024) h = (h >> 8) << 8;
+        
+        out.write((char *)&h,2);
     }
 
     inline void deserialize (float& item, std::istream& in) 
     { 
-        deserialize_floating_point(item,in);
+        static int flag = 0; //0-idle 1-have_size 2-no_size
+        if(0==flag)
+        {
+            char magic[8]; in.read(magic,8);
+            if(0==memcmp((void *)"31415926",(void *)magic,8)) { flag=2; }
+            else { flag=1; in.seekg(-8,std::ios_base::cur); }
+        }
+
+        if(2==flag)
+        {
+            float fvalue = 0; uint16_t h = 0;
+            in.read((char *)&h,2);
+            ccv_half_precision_to_float(&h,&fvalue,1);
+            item = fvalue;
+        }
+        if(1==flag) deserialize_floating_point(item,in);
     }
 
     inline void serialize ( const double& item, std::ostream& out) 
     { 
-        serialize_floating_point(item,out);
+        float fvalue = 0; uint16_t h = 0;
+        ccv_float_to_half_precision(&fvalue,&h,1);
+        ccv_half_precision_to_float(&h,&fvalue,1);
+        serialize_floating_point(fvalue,out);
     }
 
     inline void deserialize (double& item, std::istream& in) 
